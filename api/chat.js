@@ -102,15 +102,25 @@ export default async function handler(req, res) {
       }
     );
     if (!answer.ok) {
-      console.error('Workers AI HTTP status:', answer.status);
-      if (answer.status === 429 || answer.status === 402 || answer.status === 403) {
-        return respond(res, 429, { error: 'Бесплатный лимит ИИ исчерпан либо доступ ограничен. Попробуй позже.' });
-      }
-      return respond(res, 502, { error: 'ИИ сейчас недоступен. Можно продолжить в деморежиме.' });
+      // Do not log token, request body, account credentials or user messages.
+      let cloudflareError = [];
+      try {
+        const failure = await answer.json();
+        cloudflareError = (failure?.errors || []).map(e => e?.code).filter(x => Number.isInteger(x)).slice(0, 3);
+      } catch {}
+      console.error('Workers AI request failed', { status: answer.status, codes: cloudflareError });
+      if (answer.status === 401) return respond(res, 502, { error: 'Cloudflare не принимает токен. Проверь, что токен сохранён правильно.' });
+      if (answer.status === 403) return respond(res, 502, { error: 'Cloudflare отказал в доступе. Проверь разрешения Workers AI: Read и Edit.' });
+      if (answer.status === 404) return respond(res, 502, { error: 'Cloudflare не находит модель. Требуется обновление настроек сайта.' });
+      if (answer.status === 429 || answer.status === 402) return respond(res, 429, { error: 'Бесплатный лимит Cloudflare исчерпан или модель недоступна на текущем тарифе.' });
+      return respond(res, 502, { error: 'Cloudflare вернул ошибку HTTP ' + answer.status + '. Попробуй позже.' });
     }
     const data = await answer.json();
     const reply = str(data?.result?.response, 2400);
-    if (!data?.success || !reply) return respond(res, 502, { error: 'ИИ не вернул ответ. Попробуй позже.' });
+    if (!data?.success || !reply) {
+      console.error('Workers AI empty result', { codes: (data?.errors || []).map(e => e?.code).slice(0, 3) });
+      return respond(res, 502, { error: 'Cloudflare не вернул текст ответа. Попробуй позже.' });
+    }
     return respond(res, 200, { reply, mode: 'live' });
   } catch (err) {
     console.error('StoryVerse chat request failed:', err?.name || 'unknown');
