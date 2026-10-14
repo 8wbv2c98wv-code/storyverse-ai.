@@ -119,7 +119,7 @@
   function renderMessages(){
     const c=person(current);if(!c)return;
     $('chatIntro').innerHTML=`<span class="session-caption">✧ ТВОЯ ИСТОРИЯ</span><div><img src="${escape(c.avatar)}" alt=""/></div><h3>${escape(c.name)}</h3><p>${escape(c.bio)}</p>`;
-    $('messages').innerHTML=chats[current].messages.map(m=>`<div class="msg ${m.role==='user'?'user':'assistant'}">${m.role==='assistant'?`<img class="msg-avatar" src="${escape(c.avatar)}" alt=""/>`:''}<div><div class="msg-label">${m.role==='user'?'Ты':escape(c.name)}</div><div class="msg-copy">${escape(m.content)}</div></div></div>`).join('');
+    $('messages').innerHTML=chats[current].messages.map(m=>`<div class="msg ${m.role==='user'?'user':'assistant'}">${m.role==='assistant'?`<img class="msg-avatar" src="${escape(c.avatar)}" alt=""/>`:''}<div><div class="msg-label">${m.role==='error'?'СЕРВИС STORYVERSE':m.role==='user'?'Ты':escape(c.name)}</div><div class="msg-copy">${escape(m.content)}</div></div></div>`).join('');
     scrollMessages();
   }
   function scrollMessages(){requestAnimationFrame(()=>{$('chatBody').scrollTop=$('chatBody').scrollHeight})}
@@ -134,11 +134,11 @@
   }
   async function reply(c,history){
     if(!live||location.protocol==='file:')return demoReply(c,history.at(-1).content);
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','X-StoryVerse-Access-Code':aiAccessCode},body:JSON.stringify({character:{name:c.name,age:c.age,genre:c.genre,role:c.role,bio:c.bio,mood:c.mood},messages:history.slice(-18)})});
+    let response;try{response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','X-StoryVerse-Access-Code':aiAccessCode},body:JSON.stringify({character:{name:c.name,age:c.age,genre:c.genre,role:c.role,bio:c.bio,mood:c.mood},messages:history.filter(m=>m.role==='user'||(m.role==='assistant'&&!m.content.startsWith('[Соединение прервалось'))).slice(-18)})});}catch{throw Error('Сайт не может связаться с сервером. Проверь подключение к интернету.')}
     let data={};try{data=await response.json()}catch{}
     if(response.status===503&&data.demo){setMode(false);return demoReply(c,history.at(-1).content)}
     if(response.status===401){aiAccessCode='';throw Error('Неверный тестовый код. Введи его снова при следующем сообщении.')}
-    if(!response.ok)throw Error(data.error||'Не удалось получить ответ ИИ');
+    if(!response.ok)throw Error((data.error||'Не удалось получить ответ ИИ')+' (код '+response.status+')');
     if(!data.reply||typeof data.reply!=='string')throw Error('Ответ от ИИ оказался пустым');
     return data.reply;
   }
@@ -149,7 +149,7 @@
     chat.messages.push({role:'user',content:value.slice(0,1800)});chat.updated=Date.now();field.value='';field.style.height='auto';save();renderMessages();renderRecents();
     busy=true;$('sendButton').disabled=true;$('typing').classList.remove('hidden');scrollMessages();
     try{let answer=await reply(c,chat.messages);chat.messages.push({role:'assistant',content:answer.slice(0,3000)});chat.updated=Date.now();save();if(current===charId)renderMessages()}
-    catch(err){toast('Проблема с подключением: '+err.message);chat.messages.push({role:'assistant',content:'[Соединение прервалось. Попробуй отправить сообщение ещё раз.]'});save();if(current===charId)renderMessages()}
+    catch(err){const detail=(err?.message||'Неизвестная ошибка').slice(0,350);toast('Не удалось ответить: '+detail);chat.messages.push({role:'error',content:'⚠️ '+detail+'\nПовтори попытку после исправления. Твоя переписка сохранена.'});save();if(current===charId)renderMessages()}
     finally{busy=false;$('sendButton').disabled=false;$('typing').classList.add('hidden');scrollMessages()}
   }
   function clearChat(){if(!current||busy)return;if(!confirm('Начать эту историю заново? Старые сообщения будут удалены.'))return;const c=person(current);chats[current]={messages:[{role:'assistant',content:c.greeting}],updated:Date.now()};save();renderMessages();toast('История начата заново')}
