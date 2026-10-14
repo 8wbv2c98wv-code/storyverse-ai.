@@ -123,7 +123,22 @@ export default async function handler(req, res) {
     }
     return respond(res, 200, { reply, mode: 'live' });
   } catch (err) {
-    console.error('StoryVerse chat request failed:', err?.name || 'unknown');
-    return respond(res, 502, { error: 'Не удалось получить ответ ИИ. Попробуй позже.' });
+    const kind = String(err?.name || 'UnknownError').slice(0, 40);
+    const networkCode = String(err?.cause?.code || '').slice(0, 40);
+    // Only low-level status codes; never log tokens, prompts or personal data.
+    console.error('Workers AI call failed', { kind, networkCode });
+    if (kind === 'TimeoutError' || kind === 'AbortError') {
+      return respond(res, 504, { error: 'Cloudflare не ответил за 22 секунды. Это тайм-аут ИИ, а не ошибка твоего сообщения.' });
+    }
+    if (kind === 'SyntaxError') {
+      return respond(res, 502, { error: 'Cloudflare вернул ответ в неожиданном формате. Требуется проверка сервера.' });
+    }
+    if (kind === 'TypeError' && networkCode) {
+      return respond(res, 502, { error: 'Сервер не смог связаться с Cloudflare (сетевая ошибка ' + networkCode + ').' });
+    }
+    if (kind === 'TypeError') {
+      return respond(res, 502, { error: 'Сетевая ошибка при подключении к Cloudflare. Попробуй позже.' });
+    }
+    return respond(res, 502, { error: 'Внутренняя ошибка сервера (' + kind + ').' });
   }
 }
