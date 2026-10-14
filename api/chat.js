@@ -11,7 +11,7 @@ const respond = (res, status, data) => {
 const str = (value, limit) => typeof value === 'string' ? value.trim().slice(0, limit) : '';
 const genres = new Set(['Детектив', 'Фэнтези', 'Драма', 'Приключения', 'Мистика']);
 const recent = new Map();
-const cfModel = '@cf/meta/llama-3.1-8b-instruct-fast';
+const cfModel = '@cf/meta/llama-3.1-8b-instruct-fp8-fast';
 
 function validCode(given, expected) {
   const left = Buffer.from(str(given, 200));
