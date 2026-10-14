@@ -68,6 +68,7 @@
   let chats=safeParse('sv_chats_v1',{});
   let favorites=safeParse('sv_favs_v1',[]);
   let current=null, currentFilter='Все', currentNav='discover', busy=false, selectedAvatar='vera', live=false;
+  let aiAccessCode=''; // Private beta code is kept only in memory until this page is closed.
   const all=()=>[...initialCharacters,...custom];
   const person=id=>all().find(c=>c.id===id);
   const save=()=>{try{localStorage.setItem('sv_characters_v1',JSON.stringify(custom));localStorage.setItem('sv_chats_v1',JSON.stringify(chats));localStorage.setItem('sv_favs_v1',JSON.stringify(favorites))}catch{toast('Память браузера заполнена. Некоторые изменения не сохранены.')}};
@@ -133,15 +134,17 @@
   }
   async function reply(c,history){
     if(!live||location.protocol==='file:')return demoReply(c,history.at(-1).content);
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({character:{name:c.name,age:c.age,genre:c.genre,role:c.role,bio:c.bio,mood:c.mood},messages:history.slice(-18)})});
+    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','X-StoryVerse-Access-Code':aiAccessCode},body:JSON.stringify({character:{name:c.name,age:c.age,genre:c.genre,role:c.role,bio:c.bio,mood:c.mood},messages:history.slice(-18)})});
     let data={};try{data=await response.json()}catch{}
     if(response.status===503&&data.demo){setMode(false);return demoReply(c,history.at(-1).content)}
+    if(response.status===401){aiAccessCode='';throw Error('Неверный тестовый код. Введи его снова при следующем сообщении.')}
     if(!response.ok)throw Error(data.error||'Не удалось получить ответ ИИ');
     if(!data.reply||typeof data.reply!=='string')throw Error('Ответ от ИИ оказался пустым');
     return data.reply;
   }
   async function sendMessage(e){
     e.preventDefault();if(busy||!current)return;const field=$('messageInput');const value=field.value.trim();if(!value)return;
+    if(live&&!aiAccessCode){const entered=window.prompt('StoryVerse AI — закрытый тест. Введи код доступа:');if(!entered||!entered.trim())return;aiAccessCode=entered.trim();}
     const charId=current;const c=person(charId);const chat=chats[charId];
     chat.messages.push({role:'user',content:value.slice(0,1800)});chat.updated=Date.now();field.value='';field.style.height='auto';save();renderMessages();renderRecents();
     busy=true;$('sendButton').disabled=true;$('typing').classList.remove('hidden');scrollMessages();
